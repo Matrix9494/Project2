@@ -10,6 +10,7 @@
 #include <iostream>
 #include <sstream>
 #include <thread>
+#include "packet.cpp"
 
 extern int errno;
 int
@@ -21,93 +22,23 @@ main(int argc, char ** argv)
     std::cerr<<"ERROR:MUST BE 4 ARGS";
     return 0;
   }
-  /*
-  char * temp_input = argv[1];
-  char * hostname_or_ip = temp_input;
-  temp_input = argv[2];
-  int port = atoi(temp_input);
-  temp_input = argv[3];
-  char * filename = temp_input;
-  */
+
   const char* hostname_or_ip = argv[1];
   int port = atoi(argv[2]);
   const char* filename = argv[3];
-
-
-
-  //check if the address is legal//////
-  int status;
-  struct addrinfo hints;
-  struct addrinfo *servinfo;
-  memset(&hints, 0, sizeof(hints));
-  hints.ai_family = AF_INET;//ipv4
-  hints.ai_socktype = SOCK_STREAM; //TCP stream sockets
-  status = getaddrinfo(argv[1], argv[2], &hints, &servinfo);
-  if (status != 0)
-    {
-      fprintf(stderr, "ERROR: %s\n", gai_strerror(status));
-      exit(EXIT_FAILURE);
-    }
-    ///////////////////
-
   // create a socket using TCP IP
-  int sockfd = socket(AF_INET, SOCK_STREAM, 0);
-
-
-
-
-
-
+  int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+  if (sockfd == -1)
+  {
+    perror("socket");
+    return -1;
+  }
   struct sockaddr_in serverAddr;
+  socklen_t addr_len = sizeof(struct sockaddr_in);
   serverAddr.sin_family = AF_INET;
   serverAddr.sin_port = htons(port);     // short, network byte order
   serverAddr.sin_addr.s_addr = inet_addr(hostname_or_ip);
   memset(serverAddr.sin_zero, '\0', sizeof(serverAddr.sin_zero));
-
-
-/*
-////timeout//////////////////
-fd_set active_fd_set;
-struct timeval time_out;
-FD_ZERO(&active_fd_set);
-FD_SET(sockfd, &active_fd_set);
-time_out.tv_sec = 1; //set the timeout to 10s
-time_out.tv_usec = 0;
-//////////////////////////
-*/
-
-
-
-
-
-
-  // connect to the server
-
-  if (connect(sockfd, (struct sockaddr *)&serverAddr, sizeof(serverAddr)) == -1) {
-    perror("connect");
-    return 2;
-  }
-
-
-
-
-
-
-
-
-
-
-  struct sockaddr_in clientAddr;
-  socklen_t clientAddrLen = sizeof(clientAddr);
-  if (getsockname(sockfd, (struct sockaddr *)&clientAddr, &clientAddrLen) == -1) {
-    perror("getsockname");
-    return 3;
-  }
-
-  char ipstr[INET_ADDRSTRLEN] = {'\0'};
-  inet_ntop(clientAddr.sin_family, &clientAddr.sin_addr, ipstr, sizeof(ipstr));
-  std::cout << "Set up a connection from: " << ipstr << ":" <<
-    ntohs(clientAddr.sin_port) << std::endl;
 
 
   // send/receive data to/from connection
@@ -126,48 +57,29 @@ time_out.tv_usec = 0;
 
 
   int ccc = 1;
+  char buf[1024] = {0};
   while(ccc > 0)
   {
 
-    ccc = ccc + 1;
-    if (ccc > 10)
-    {
-      std::this_thread::sleep_for(std::chrono::seconds(10));
-    }
-    
+    packet send_packet;
 
-
-    /*
-    ///timeout////////////
-    int rs = select(sockfd+1, NULL, &active_fd_set, NULL, &time_out);
-    if(rs < 0)
-      {
-        fprintf(stderr, "ERROR: Select failed\n");
-        return 4;
-      }
-    else if( rs == 0)
-      {
-        fprintf(stderr, "ERROR: Connection timeout\n");
-        return 4;
-      }
-      ////////////////////
-      */
-
-
-    char buf[1024] = {0};
     memset(buf, '\0', sizeof(buf));
-    int break_or_not = fread(buf, sizeof(char), sizeof(buf), file_send);
+    int file_not = fread(buf, sizeof(char), sizeof(buf), file_send);
 
-    if (break_or_not == 0)
+    if (file_not == 0)
     {
       fclose(file_send);
       break;
     }
-    send(sockfd, buf, break_or_not, 0);
+    generate_packet(send_packet, MAX_SEQ_NUM,MAX_SEQ_NUM,MAX_PKT_LEN,buf);
+    std::cout << send_packet.data<< std::endl;
+
+
+    sendto(sockfd, &send_packet, sizeof(send_packet), 0,(struct sockaddr *)&serverAddr, addr_len);
   }
-
-
-
+  memset(buf, '\0', sizeof(buf));
+  recvfrom(sockfd, buf, sizeof(buf), 0, (struct sockaddr*)&serverAddr, &addr_len);
+  std::cout <<buf<< std::endl;
   close(sockfd);
 
   return 0;

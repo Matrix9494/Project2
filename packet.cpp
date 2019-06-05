@@ -48,6 +48,20 @@ struct header
 
 struct packet
 {
-  header header;
-  char data[DATA_SIZE];
+  header head;
+  char data[DATA_SIZE]="";
 };
+
+
+
+void generate_packet(packet &pac,   uint32_t seq,   uint32_t ack,   uint16_t flag, char *buf)
+{
+  pac.head.seq = htonl(seq);
+  pac.head.ack = htonl(ack);
+  pac.head.flag = htonl(flag);
+  for (int i = 0; i<DATA_SIZE; i++)
+  {
+    pac.data[i] = buf[i];
+  }
+
+}
