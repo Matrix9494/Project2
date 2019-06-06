@@ -49,13 +49,13 @@ struct header
 struct packet
 {
   header head;
-  char data[DATA_SIZE] = "";
+  char data[DATA_SIZE];
 
 };
 
 
 
-void generate_packet(packet &pac,   uint32_t seq,   uint32_t ack,   uint16_t flag, char*buf)
+void generate_packet(packet &pac,   uint32_t seq,   uint32_t ack,   uint16_t flag, char*buf, int lendata)
 {
   // pac.head.seq = htonl(seq);
   // pac.head.ack = htonl(ack);
@@ -66,9 +66,9 @@ void generate_packet(packet &pac,   uint32_t seq,   uint32_t ack,   uint16_t fla
   pac.head.flag = flag;
   //std::cout << sizeof(pac.data)<< std::endl;
   //std::cout << sizeof(buf)<< std::endl;
-  memset(pac.data, '\0', sizeof(pac.data));
-
-  for (int i= 0; i < sizeof(buf); i++)
+  //memset(pac.data, '\0', lendata);
+  //pac.data = (char*)malloc(lendata*sizeof(char));
+  for (int i= 0; i < lendata; i++)
   {
     pac.data[i] = buf[i];
   }

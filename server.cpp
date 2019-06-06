@@ -109,6 +109,13 @@ int main(int argc, char ** argv)
     perror("bind");
     return 2;
   }
+//use to let recvfrom nonblock and retransmission
+  struct timeval timeout;
+  timeout.tv_sec = 0;
+  timeout.tv_usec = RETRANS_TIMEOUT; // 500ms
+  if (setsockopt (sockfd, SOL_SOCKET, SO_RCVTIMEO, (char *) &timeout, sizeof(timeout)) < 0) {
+    cerr << "setsockopt failed\n";
+  }
 
 
   int ccc = 0;
@@ -130,7 +137,7 @@ int main(int argc, char ** argv)
       if(recv_packet.head.flag == 1)
       {
         CURRENT_ACK_NUM = (recv_packet.head.seq + 1) % (MAX_SEQ_NUM + 1);
-        generate_packet(send_packet, CURRENT_SEQ_NUM,CURRENT_ACK_NUM,2,buf);
+        generate_packet(send_packet, CURRENT_SEQ_NUM,CURRENT_ACK_NUM,2,buf, sizeof(buf));
         if (sendto(sockfd, &send_packet, sizeof(send_packet), 0, (struct sockaddr*)&addr, addr_len) == -1)
         {
           perror("send error");
@@ -158,13 +165,9 @@ int main(int argc, char ** argv)
     sprintf(name, "%s/%d.txt", FILE_DIR, ccc);
     FILE * file_write = fopen(name, "wb");
 
-    int jjj = 0;
+
     while(1)
     {
-      jjj++;
-
-
-
       ///timeout////////////
 
         ////////////////////
@@ -174,20 +177,29 @@ int main(int argc, char ** argv)
       if (recv_packet.head.flag == 4)
       {
         //cout<<"eee"<<endl;
-        cout<<strlen(recv_packet.data)<<endl;
-        fwrite(recv_packet.data, sizeof(char), strlen(recv_packet.data), file_write);
+        //cout<<strlen(recv_packet.data)<<endl;
+        fwrite(recv_packet.data, sizeof(char), sizeof(recv_packet.data), file_write);
         fclose(file_write);
         break;
       }
-      //cout<<"fff"<<endl;
-      cout<<sizeof(recv_packet.data)<<endl;
-      fwrite(recv_packet.data, sizeof(char), sizeof(recv_packet.data), file_write);
-
-      if(sendto(sockfd,buf, sizeof(buf), 0, (struct sockaddr *)&addr, addr_len) == -1)
+      //everything is OK
+      if (CURRENT_ACK_NUM == recv_packet.head.seq)
       {
-          perror("send error");
-          return 1;
+        fwrite(recv_packet.data, sizeof(char), sizeof(recv_packet.data), file_write);
+        CURRENT_ACK_NUM = (CURRENT_ACK_NUM + sizeof(recv_packet.data)) % (MAX_SEQ_NUM + 1);
+        generate_packet(send_packet, CURRENT_SEQ_NUM,CURRENT_ACK_NUM,3,buf, sizeof(buf));
+        if (CURRENT_SEQ_NUM + 1 == recv_packet.head.ack)
+        {
+          CURRENT_SEQ_NUM = (CURRENT_SEQ_NUM + 1) % (MAX_SEQ_NUM + 1);
+        }
+        if(sendto(sockfd,&send_packet, sizeof(send_packet), 0, (struct sockaddr *)&addr, addr_len) == -1)
+        {
+            perror("send error");
+            return 1;
+        }
       }
+      cout<<sizeof(recv_packet.data)<<endl;
+
       int break_or_not = recvfrom(sockfd, &recv_packet, MSS, 0, (struct sockaddr*)&addr, &addr_len);
       cout<<recv_packet.head.seq<<endl;
       //rwnd.insert(recv_packet);
