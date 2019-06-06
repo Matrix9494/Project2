@@ -13,8 +13,16 @@
 #include "packet.cpp"
 
 extern int errno;
-int
-main(int argc, char ** argv)
+
+packet send_packet;
+packet recv_packet;
+uint16_t cwnd_size = INIT_CWND_SIZE;
+uint32_t CURRENT_SEQ_NUM = 1234;
+uint32_t CURRENT_ACK_NUM = 0;
+bool establishedTCP = 0;
+char ALLFILE[100000000];
+
+int main(int argc, char ** argv)
 {
 
   if (argc != 4)
@@ -33,54 +41,118 @@ main(int argc, char ** argv)
     perror("socket");
     return -1;
   }
-  struct sockaddr_in serverAddr;
+  struct sockaddr_in addr;
   socklen_t addr_len = sizeof(struct sockaddr_in);
-  serverAddr.sin_family = AF_INET;
-  serverAddr.sin_port = htons(port);     // short, network byte order
-  serverAddr.sin_addr.s_addr = inet_addr(hostname_or_ip);
-  memset(serverAddr.sin_zero, '\0', sizeof(serverAddr.sin_zero));
+  addr.sin_family = AF_INET;
+  addr.sin_port = htons(port);     // short, network byte order
+  addr.sin_addr.s_addr = inet_addr(hostname_or_ip);
+  memset(addr.sin_zero, '\0', sizeof(addr.sin_zero));
 
 
-  // send/receive data to/from connection
+  //first, establish the connection
+
+  char buf[DATA_SIZE] = {0};
+  memset(buf, '\0', sizeof(buf));
+  CURRENT_ACK_NUM = (recv_packet.head.seq + 1) % (MAX_SEQ_NUM + 1);
+  generate_packet(send_packet, CURRENT_SEQ_NUM,CURRENT_ACK_NUM,1,buf);
+  if (sendto(sockfd, &send_packet, sizeof(send_packet), 0, (struct sockaddr*)&addr, addr_len) == -1)
+  {
+    perror("send error");
+    return 1;
+  }
+  cout << "first hand "<<CURRENT_SEQ_NUM<<" "<<CURRENT_ACK_NUM<< endl;
+
+  while (!establishedTCP)
+  {
+    int bytesRec = recvfrom(sockfd, &recv_packet, MSS, 0, (struct sockaddr*)&addr, &addr_len);
+    if ( recv_packet.head.flag == 2 )
+    {
+      CURRENT_ACK_NUM = recv_packet.head.seq + 1;
+      CURRENT_SEQ_NUM = CURRENT_SEQ_NUM + 1;
+      establishedTCP = true;
+      cout << "finish "<<CURRENT_SEQ_NUM<<" "<<CURRENT_ACK_NUM<< endl;
+      break;
+
+    }
+  }
 
 
 
-  //read the file filename
+
+  //second, data transmission
+
+  //read the file and save it to ALLFILE
   FILE * file_send = fopen(filename, "rb");
   if(file_send == NULL)
     {
       fprintf(stderr, "ERROR: Can't open the file\n");
       return 4;
     }
+  memset(ALLFILE, '\0', sizeof(ALLFILE));
+  ini_file = 0;
+  while(1)
+  {
+    memset(buf, '\0', sizeof(buf));
+    int file_not = fread(buf, sizeof(char), sizeof(buf), file_send);
+    if(file_not == 0)
+      break;
+    for (int i = 0; i<file_not; i++)
+    {
+      ALLFILE[i+ini_file] = buf[i];
+    }
+    ini_file+=file_not;
+  }
+
 
 ///timeout/////////////////////
 
-
-  int ccc = 1;
-  char buf[1024] = {0};
-  while(ccc > 0)
+  int jjj = 0;
+  while(1)
   {
+    jjj++;
 
-    packet send_packet;
 
-    memset(buf, '\0', sizeof(buf));
-    int file_not = fread(buf, sizeof(char), sizeof(buf), file_send);
 
+    //std::cout << strlen(buf)<< std::endl;
     if (file_not == 0)
     {
       fclose(file_send);
+      generate_packet(send_packet, CURRENT_SEQ_NUM,CURRENT_ACK_NUM,4,buf);
+      cout<<CURRENT_SEQ_NUM<<" "<<"final"<<endl;
+      if(sendto(sockfd, &send_packet, sizeof(send_packet), 0,(struct sockaddr *)&addr, addr_len) == -1)
+      {
+        perror("send error");
+        return 1;
+      }
+      CURRENT_SEQ_NUM = (CURRENT_SEQ_NUM + sizeof(send_packet.data)) % (MAX_SEQ_NUM + 1);
+
+
       break;
+
     }
-    generate_packet(send_packet, MAX_SEQ_NUM,MAX_SEQ_NUM,MAX_PKT_LEN,buf);
-    std::cout << send_packet.data<< std::endl;
+    generate_packet(send_packet, CURRENT_SEQ_NUM,CURRENT_ACK_NUM,3,buf);
+    cout<<CURRENT_SEQ_NUM<<" "<<"normal"<<endl;
+    std::cout << sizeof(send_packet.data)<< std::endl;
 
 
-    sendto(sockfd, &send_packet, sizeof(send_packet), 0,(struct sockaddr *)&serverAddr, addr_len);
+    if(sendto(sockfd, &send_packet, sizeof(send_packet), 0,(struct sockaddr *)&addr, addr_len) == -1)
+    {
+      perror("send error");
+      return 1;
+    }
+    CURRENT_SEQ_NUM = (CURRENT_SEQ_NUM + sizeof(send_packet.data)) % (MAX_SEQ_NUM + 1);
+
   }
   memset(buf, '\0', sizeof(buf));
-  recvfrom(sockfd, buf, sizeof(buf), 0, (struct sockaddr*)&serverAddr, &addr_len);
-  std::cout <<buf<< std::endl;
+  //recvfrom(sockfd, &recv_packet, sizeof(buf), 0, (struct sockaddr*)&addr, &addr_len);
+  //std::cout <<buf<< std::endl;
   close(sockfd);
+
+  //third, finalize
+
+
+
+
 
   return 0;
 }

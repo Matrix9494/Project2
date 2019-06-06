@@ -16,8 +16,14 @@
 #include <csignal>
 #include <netdb.h>
 #include "packet.cpp"
-
-//using namespace std;
+set<packet> rwnd;
+uint32_t CURRENT_SEQ_NUM = 4321;
+uint32_t CURRENT_ACK_NUM = 0;
+bool establishedTCP = 0;
+bool startedHandshake = 0;
+packet recv_packet;
+packet send_packet;
+using namespace std;
 void signal_handler(int signal)
 {
   if (signal == SIGQUIT || signal == SIGTERM)
@@ -26,6 +32,10 @@ void signal_handler(int signal)
   }
 
 }
+
+
+
+
 
 int main(int argc, char ** argv)
 {
@@ -102,69 +112,126 @@ int main(int argc, char ** argv)
 
 
   int ccc = 0;
-  // accept a new connection
-
-
-
-  //////timeout//////////////////
-
-
-  // read/write data from/into the connection
-
-
-
-
 
 
   while(1)
   {
+    //This loop is for different client to establish the connection_num
+    //first three handshake
+
+
+    if (!establishedTCP)
+    {
+      char buf[300] = {0};
+      memset(buf, '\0', sizeof(buf));
+      int bytesRec = recvfrom(sockfd, &recv_packet, MSS, 0, (struct sockaddr*)&addr, &addr_len);
+
+      startedHandshake = 1;
+      if(recv_packet.head.flag == 1)
+      {
+        CURRENT_ACK_NUM = (recv_packet.head.seq + 1) % (MAX_SEQ_NUM + 1);
+        generate_packet(send_packet, CURRENT_SEQ_NUM,CURRENT_ACK_NUM,2,buf);
+        if (sendto(sockfd, &send_packet, sizeof(send_packet), 0, (struct sockaddr*)&addr, addr_len) == -1)
+        {
+          perror("send error");
+          return 1;
+        }
+        cout << "second hand "<<CURRENT_SEQ_NUM<<" "<<CURRENT_ACK_NUM<< endl;
+        continue;
+      }
+      if(recv_packet.head.flag == 3 && startedHandshake)
+      {
+        establishedTCP = 1;
+        CURRENT_SEQ_NUM = recv_packet.head.ack;
+        CURRENT_ACK_NUM = (recv_packet.head.seq + sizeof(recv_packet.data)) % (MAX_SEQ_NUM + 1);
+        cout << "all done "<<CURRENT_SEQ_NUM<<" "<<CURRENT_ACK_NUM<< endl;
+        continue;
+      }
+    }
+
+
+    //now begin to transmiss file
     ccc+=1;
+
+    std::cout << ccc<< std::endl;
     char *name = new char[100];
     sprintf(name, "%s/%d.txt", FILE_DIR, ccc);
-
     FILE * file_write = fopen(name, "wb");
 
-    packet recv_packet;
-
-    ///timeout////////////
-
-      ////////////////////
-    char buf[300] = {0};
-    memset(buf, '\0', sizeof(buf));
-    //int break_or_not = recv(sockfd, buf, sizeof(buf), 0);
-    int break_or_not = recvfrom(sockfd, &recv_packet, MSS, 0, (struct sockaddr*)&addr, &addr_len);
-    std::cout << recv_packet.data<< std::endl;
-    // if (break_or_not == 0)
-    // {
-    //
-    //   fclose(file_write);
-    //   //printf("aaa\n");
-    //   break;
-    // }
-    // if (break_or_not == -1)
-    // {
-    //   if (EWOULDBLOCK) {
-    //     //This is for waiting!
-    //     continue;
-    //   }
-    //   else{
-    //     std::cout <<"error!"<< std::endl;
-    //     break;
-    //   }
-    //
-    // }
-
-    std::cout << "yes"<< std::endl;
-    fwrite(buf, sizeof(char), break_or_not, file_write);
+    int jjj = 0;
+    while(1)
+    {
+      jjj++;
 
 
 
+      ///timeout////////////
+
+        ////////////////////
+      char buf[300] = {0};
+      memset(buf, '\0', sizeof(buf));
+      //int break_or_not = recv(sockfd, buf, sizeof(buf), 0);
+      if (recv_packet.head.flag == 4)
+      {
+        //cout<<"eee"<<endl;
+        cout<<strlen(recv_packet.data)<<endl;
+        fwrite(recv_packet.data, sizeof(char), strlen(recv_packet.data), file_write);
+        fclose(file_write);
+        break;
+      }
+      //cout<<"fff"<<endl;
+      cout<<sizeof(recv_packet.data)<<endl;
+      fwrite(recv_packet.data, sizeof(char), sizeof(recv_packet.data), file_write);
+
+      if(sendto(sockfd,buf, sizeof(buf), 0, (struct sockaddr *)&addr, addr_len) == -1)
+      {
+          perror("send error");
+          return 1;
+      }
+      int break_or_not = recvfrom(sockfd, &recv_packet, MSS, 0, (struct sockaddr*)&addr, &addr_len);
+      cout<<recv_packet.head.seq<<endl;
+      //rwnd.insert(recv_packet);
+
+      // if (break_or_not == 0)
+      // {
+      //
+      //   fclose(file_write);
+      //   //printf("aaa\n");
+      //   break;
+      // }
+      // if (break_or_not == -1)
+      // {
+      //   if (EWOULDBLOCK) {
+      //     //This is for waiting!
+      //     continue;
+      //   }
+      //   else{
+      //     std::cout <<"error!"<< std::endl;
+      //     break;
+      //   }
+      //
+      // }
+
+      //std::cout<<recv_packet.head.flag<<std::endl;
+      //std::cout<<INIT_CWND_SIZE<<std::endl;
+
+    }
+
+    //now finalize the establish
 
 
-    sendto(sockfd,buf, sizeof(buf), 0, (struct sockaddr *)&addr, addr_len);
+    establishedTCP = 0;
+    startedHandshake = 0;
 
-    fclose(file_write);
+
+
+
+
   }
+
+
+
+
 
   return 0;
 }
