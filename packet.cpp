@@ -41,9 +41,11 @@ string flag_in_str = "";
 
 struct header
 {
-  uint32_t seq;
-  uint32_t ack;
-  uint16_t flag;
+  short seq;
+  short ack;
+  int flag;
+  int lendata;
+  //char extra[3];
 };
 
 struct packet
@@ -53,7 +55,13 @@ struct packet
 
 };
 
+struct packet_head
+{
+  header head;
+};
+//current seq number should be current + data size
 
+//current ack should be oppsite seq number + oppsite data size
 
 void generate_packet(packet &pac,   uint32_t seq,   uint32_t ack,   uint16_t flag, char*buf, int lendata)
 {
@@ -64,10 +72,7 @@ void generate_packet(packet &pac,   uint32_t seq,   uint32_t ack,   uint16_t fla
   pac.head.seq = seq;
   pac.head.ack = ack;
   pac.head.flag = flag;
-  //std::cout << sizeof(pac.data)<< std::endl;
-  //std::cout << sizeof(buf)<< std::endl;
-  //memset(pac.data, '\0', lendata);
-  //pac.data = (char*)malloc(lendata*sizeof(char));
+  pac.head.lendata = lendata;
   for (int i= 0; i < lendata; i++)
   {
     pac.data[i] = buf[i];
@@ -78,17 +83,10 @@ void generate_packet(packet &pac,   uint32_t seq,   uint32_t ack,   uint16_t fla
 
 
 
+void generate_packet_head(packet_head &pac,   uint32_t seq,   uint32_t ack,   uint16_t flag)
+{
+  pac.head.seq = seq;
+  pac.head.ack = ack;
+  pac.head.flag = flag;
 
-// class Box
-// {
-//    public:
-//       double length;         // 长度
-//       double breadth;        // 宽度
-//       double height;         // 高度
-//
-//       // 成员函数声明
-//       double getVolume(void);
-//       void setLength( double len );
-//       void setBreadth( double bre );
-//       void setHeight( double hei );
-// };
+}

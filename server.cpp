@@ -23,6 +23,7 @@ bool establishedTCP = 0;
 bool startedHandshake = 0;
 packet recv_packet;
 packet send_packet;
+bool ackforfin = 0;
 using namespace std;
 void signal_handler(int signal)
 {
@@ -110,15 +111,17 @@ int main(int argc, char ** argv)
     return 2;
   }
 //use to let recvfrom nonblock and retransmission
-  struct timeval timeout;
-  timeout.tv_sec = 0;
-  timeout.tv_usec = RETRANS_TIMEOUT; // 500ms
-  if (setsockopt (sockfd, SOL_SOCKET, SO_RCVTIMEO, (char *) &timeout, sizeof(timeout)) < 0) {
-    cerr << "setsockopt failed\n";
-  }
+  // struct timeval timeout;
+  // timeout.tv_sec = 0;
+  // timeout.tv_usec = RETRANS_TIMEOUT; // 500ms
+  // if (setsockopt (sockfd, SOL_SOCKET, SO_RCVTIMEO, (char *) &timeout, sizeof(timeout)) < 0) {
+  //   cerr << "setsockopt failed\n";
+  // }
 
-
+  int bbb = sizeof(recv_packet);
+  std::cout<<bbb<<std::endl;
   int ccc = 0;
+
 
 
   while(1)
@@ -131,8 +134,13 @@ int main(int argc, char ** argv)
     {
       char buf[300] = {0};
       memset(buf, '\0', sizeof(buf));
+      //recv_packet.data = (char*)malloc(DATA_SIZE*sizeof(char));
       int bytesRec = recvfrom(sockfd, &recv_packet, MSS, 0, (struct sockaddr*)&addr, &addr_len);
+      if (bytesRec == -1)
+      {
 
+      }
+      std::cout<<"RECV "<<recv_packet.head.seq<<" "<<recv_packet.head.ack<<" 0 0 "<<std::endl;
       startedHandshake = 1;
       if(recv_packet.head.flag == 1)
       {
@@ -143,14 +151,16 @@ int main(int argc, char ** argv)
           perror("send error");
           return 1;
         }
-        cout << "second hand "<<CURRENT_SEQ_NUM<<" "<<CURRENT_ACK_NUM<< endl;
+        std::cout<<"SEND "<<send_packet.head.seq<<" "<<send_packet.head.ack<<" 0 0 "<<std::endl;
+        //cout << "second hand "<<CURRENT_SEQ_NUM<<" "<<CURRENT_ACK_NUM<< endl;
+        CURRENT_SEQ_NUM += 1;
         continue;
       }
       if(recv_packet.head.flag == 3 && startedHandshake)
       {
         establishedTCP = 1;
-        CURRENT_SEQ_NUM = recv_packet.head.ack;
-        CURRENT_ACK_NUM = (recv_packet.head.seq + sizeof(recv_packet.data)) % (MAX_SEQ_NUM + 1);
+        //CURRENT_SEQ_NUM = recv_packet.head.ack;
+        //CURRENT_ACK_NUM = (recv_packet.head.seq + sizeof(recv_packet.data)) % (MAX_SEQ_NUM + 1);
         cout << "all done "<<CURRENT_SEQ_NUM<<" "<<CURRENT_ACK_NUM<< endl;
         continue;
       }
@@ -178,54 +188,43 @@ int main(int argc, char ** argv)
       {
         //cout<<"eee"<<endl;
         //cout<<strlen(recv_packet.data)<<endl;
-        fwrite(recv_packet.data, sizeof(char), sizeof(recv_packet.data), file_write);
+        //fwrite(recv_packet.data, sizeof(char), recv_packet.head.lendata, file_write);
         fclose(file_write);
         break;
       }
       //everything is OK
       if (CURRENT_ACK_NUM == recv_packet.head.seq)
       {
-        fwrite(recv_packet.data, sizeof(char), sizeof(recv_packet.data), file_write);
+        fwrite(recv_packet.data, sizeof(char), recv_packet.head.lendata, file_write);
         CURRENT_ACK_NUM = (CURRENT_ACK_NUM + sizeof(recv_packet.data)) % (MAX_SEQ_NUM + 1);
         generate_packet(send_packet, CURRENT_SEQ_NUM,CURRENT_ACK_NUM,3,buf, sizeof(buf));
-        if (CURRENT_SEQ_NUM + 1 == recv_packet.head.ack)
-        {
-          CURRENT_SEQ_NUM = (CURRENT_SEQ_NUM + 1) % (MAX_SEQ_NUM + 1);
-        }
+        CURRENT_SEQ_NUM = (CURRENT_SEQ_NUM + 1) % (MAX_SEQ_NUM + 1);
+
         if(sendto(sockfd,&send_packet, sizeof(send_packet), 0, (struct sockaddr *)&addr, addr_len) == -1)
         {
             perror("send error");
             return 1;
         }
+        std::cout<<"SEND "<<send_packet.head.seq<<" "<<send_packet.head.ack<<" 0 0 "<<std::endl;
       }
-      cout<<sizeof(recv_packet.data)<<endl;
+      //cout<<sizeof(recv_packet.data)<<endl;
 
       int break_or_not = recvfrom(sockfd, &recv_packet, MSS, 0, (struct sockaddr*)&addr, &addr_len);
-      cout<<recv_packet.head.seq<<endl;
-      //rwnd.insert(recv_packet);
+      if (break_or_not == -1)
+      {
+        if (EWOULDBLOCK)
+        {
+          continue;
+        }
+        else
+        {
+          std::cout <<"error!"<< std::endl;
+          break;
+        }
 
-      // if (break_or_not == 0)
-      // {
-      //
-      //   fclose(file_write);
-      //   //printf("aaa\n");
-      //   break;
-      // }
-      // if (break_or_not == -1)
-      // {
-      //   if (EWOULDBLOCK) {
-      //     //This is for waiting!
-      //     continue;
-      //   }
-      //   else{
-      //     std::cout <<"error!"<< std::endl;
-      //     break;
-      //   }
-      //
-      // }
+      }
+      std::cout<<"RECV "<<recv_packet.head.seq<<" "<<recv_packet.head.ack<<" 0 0 "<<std::endl;
 
-      //std::cout<<recv_packet.head.flag<<std::endl;
-      //std::cout<<INIT_CWND_SIZE<<std::endl;
 
     }
 
@@ -234,6 +233,65 @@ int main(int argc, char ** argv)
 
     establishedTCP = 0;
     startedHandshake = 0;
+
+
+    ackforfin = 0;
+    //my part
+    //FIN recieved, and send ACK
+    packet_head terminate_packet;
+    generate_packet_head(terminate_packet,CURRENT_SEQ_NUM,CURRENT_ACK_NUM,5);
+    cout << "SEND "<<CURRENT_SEQ_NUM<<" "<<CURRENT_ACK_NUM<<" "<<"ACK|FIN"<<endl;
+    if(sendto(sockfd, &terminate_packet, sizeof(terminate_packet), 0,(struct sockaddr *)&addr, addr_len) == -1)
+    {
+      perror("ACK for FIN send error");
+      return 1;
+    }
+    // send FIN
+    packet_head packet_fin;
+    generate_packet_head(packet_fin, CURRENT_SEQ_NUM,0,4);
+    cout<<"SEND"<<CURRENT_SEQ_NUM<<" "<<0<<" "<<"FIN"<<endl;
+    if(sendto(sockfd, &packet_fin, sizeof(packet_fin), 0,(struct sockaddr *)&addr, addr_len) == -1)
+    {
+      perror("FIN send error");
+      return 1;
+    }
+
+    //waiting for ACK of FIN, did not consider abort time first
+    while (!ackforfin)
+    {
+    int bytesRec = recvfrom(sockfd, &recv_packet, sizeof(recv_packet), 0, (struct sockaddr*)&addr, &addr_len);
+    if (bytesRec==-1)
+    {
+      //insert abort time here
+      // if (time_elapsed(start_time) >= abort_timeout)//abort connection without receiving packets in 10 seconds.
+      //   {
+      //     break;
+      //   }
+      //   if (EWOULDBLOCK) {
+      //    if (sendto(sockfd, &send_packet_fin, sizeof(send_packet_fin), 0, (struct sockaddr *)&clientAddr, (socklen_t)sizeof(clientAddr)) == -1) {
+      //     perror("send error");
+      //     return 1;
+      //   }
+      // }
+      // else {
+      //   perror("Error while listening for ACK");
+      //   return 1;
+      // }
+    }
+    // check the second part
+    else
+    {
+      if ((recv_packet.head.flag==5)&&(recv_packet.head.seq==0))
+      {
+        cout<<"Recived ACK for FIN"<<endl;
+        ackforfin=1;
+      }
+    }
+
+    }
+    cout<<"Closing connection"<<endl;
+    close(sockfd);
+    //end my part
 
 
 
