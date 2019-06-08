@@ -290,7 +290,7 @@ int main(int argc, char ** argv)
 
     }
     cout<<"Closing connection"<<endl;
-    close(sockfd);
+    //close(sockfd);
     //end my part
 
 
