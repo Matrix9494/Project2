@@ -58,12 +58,13 @@ struct packet
 struct packet_head
 {
   header head;
+  bool nul;
 };
 //current seq number should be current + data size
 
 //current ack should be oppsite seq number + oppsite data size
 
-void generate_packet(packet &pac,   uint32_t seq,   uint32_t ack,   uint16_t flag, char*buf, int lendata)
+void generate_packet(packet &pac,   short seq,   short ack,   int flag, char*buf, int lendata)
 {
   // pac.head.seq = htonl(seq);
   // pac.head.ack = htonl(ack);
@@ -83,7 +84,7 @@ void generate_packet(packet &pac,   uint32_t seq,   uint32_t ack,   uint16_t fla
 
 
 
-void generate_packet_head(packet_head &pac,   uint32_t seq,   uint32_t ack,   uint16_t flag)
+void generate_packet_head(packet_head &pac,   short seq,   short ack,   int flag)
 {
   pac.head.seq = seq;
   pac.head.ack = ack;
